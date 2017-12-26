@@ -1,0 +1,3 @@
+[submodule "gifsicle"]
+	path = gifsicle
+	url = https://github.com/kohler/gifsicle.git

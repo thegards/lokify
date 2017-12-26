@@ -1,88 +1,102 @@
-#!/bin/bash -x
+#!/bin/bash
 
-SLACK_MAX_WIDTH=128
+SLACK_MAX_WIDTH=100
 
 workspace=`realpath $(dirname $0)`
 
 assemble_gif() {
-	image_name=$1
-	search_pattern=$2
-	workdir=$3
+	local image_prefix=$1
+	local image_suffix=$2
+	local search_pattern=$3
+	local workdir=$4
+	local output_dir=$5
 
-	files=$(find -name "$search_pattern" ${workdir} | sort)
+	mkdir -p ${output_dir}
+
+	local files=$(find ${workdir} -regex "$search_pattern" | sort)
 	convert -loop 0 -page +0+0 ${files} -set dispose background -set delay 4 \
-		${image_name}_loko.gif
-	#gifsicle -O2 --colors 128 $1loko.gif -o $1loko.opt.gif
+		${output_dir}/${image_prefix}-loko-nopt-${image_suffix}.gif
+	gifsicle -O2 --colors 128 \
+		${output_dir}/${image_prefix}-loko-nopt-${image_suffix}.gif \
+		-o ${output_dir}/${image_prefix}-loko-${image_suffix}.gif
+	rm ${output_dir}/*-loko-nopt-*.gif
 }
 
 generate_rotations() {
-	image_path=$1
-	output_dir=$2
+	local image_path=$1
+	local image_prefix=$2
+	local output_dir=$3
 
-	image_filename=$(basename ${image_path})
-	image_name=${image_filename%.*}
-	image_fmt=${image_filename##*.}
+	local image_filename=$(basename ${image_path})
+	local image_name=${image_filename%.*}
+	local image_fmt=${image_filename##*.}
 
 	mkdir -p ${output_dir}
 
 	for angle in $(seq 0 20 340); do
-		hue=$(expr \( 100 \+ 100 \* ${angle} / 180 \) % 200)
+		local hue=$(expr \( 100 \+ 100 \* ${angle} / 180 \) % 200)
 		convert ${image_path} \
 			-modulate 100,100,${hue} \
 			-alpha set \( +clone -background none -rotate ${angle} \) \
 			-gravity center -compose Src -composite +dither -colors 32 \
-			${output_dir}/${image_name}_$(printf "%03d" ${angle}).${image_fmt}
+			${output_dir}/${image_prefix}-$(printf "%03d" ${angle}).${image_fmt}
 	done
 }
 
 cut_to_tiles() {
-	image_path=$1
-	grid_size=$2
-	tile_width=$3
-	output_dir=$4
+	local image_path=$1
+	local image_prefix=$2
+	local grid_size=$3
+	local tile_width=$4
+	local output_dir=$5
 
-	image_filename=$(basename ${image_path})
-	image_name=${image_filename%.*}
-	image_fmt=${image_filename##*.}
+	local image_filename=$(basename ${image_path})
+	local image_name=${image_filename%.*}
+	local image_fmt=${image_filename##*.}
 
-	tile_dimensions=$(printf "%dx%d" ${tile_width} ${tile_width})
-	resized_side=$(expr ${grid_size} \* ${tile_width})
-	resized_dimensions=$(printf "%dx%d" ${resized_side} ${resized_side})
-
-	if [ -z ${output_dir} ];
+	if [ "x${image_prefix}" == "x" ];
 	then
-		output_dir=${workspace}/${image_name}
-		tile_directory=${output_dir}/tiles$2
-	else
-		tile_directory=${output_dir}
+		image_prefix=${image_name}
 	fi
 
+	local tile_dimensions=$(printf "%dx%d" ${tile_width} ${tile_width})
+
 	mkdir -p ${output_dir}
-	mkdir -p ${tile_directory}
 
-	resized_filename=${output_dir}/${image_name}_${resized_dimensions}.${image_fmt}
 	convert ${image_path} \
-		-resize "${resized_dimensions}!" ${resized_filename}
-
-	convert ${resized_filename} \
 		-crop ${tile_dimensions} \
 		-set filename:tile "%[fx:page.y/${tile_width}]%[fx:page.x/${tile_width}]" \
 		+repage +adjoin \
-		"${tile_directory}/${image_name}_%[filename:tile].${image_fmt}"
+		"${output_dir}/${image_prefix}-%[filename:tile].${image_fmt}"
 }
 
 resize_image() {
+	local image_path=$1
+	local resized_dimensions=$2
+	local resized_filename=$3
+
+	convert ${image_path} \
+		-resize "${resized_dimensions}!" ${resized_filename}
 }
 
 anyfy() {
-	image_path=$1
-	grid_size=$2
+	local image_path=$1
+	local grid_size=$2
 
-	resized_size=
-	output_size=
+	local image_filename=$(basename ${image_path})
+	local image_name=${image_filename%.*}
+	local image_fmt=${image_filename##*.}
 
-	resize_image ${image_path} ${resized_size} ${output_path}
-	cut_to_tiles ${resized_image_path} ${grid_size} ${SLACK_MAX_WIDTH}
+	local output_dir=${workspace}/${image_name}-${grid_size}fy
+
+	local resized_side=$(expr ${grid_size} \* ${SLACK_MAX_WIDTH})
+	local resized_dimensions=$(printf "%dx%d" ${resized_side} ${resized_side})
+	local resized_filename=${output_dir}/${image_name}-${resized_dimensions}.${image_fmt}
+
+	mkdir -p ${output_dir}
+
+	resize_image ${image_path} ${resized_dimensions} ${resized_filename}
+	cut_to_tiles ${resized_filename} ${image_name} ${grid_size} ${SLACK_MAX_WIDTH} ${output_dir}
 }
 
 megafy() {
@@ -103,10 +117,10 @@ lokify() {
 
 	mkdir -p $1
 
-	files=""
+	local files=""
 
 	for angle in $(seq 0 20 340); do
-		hue=$(expr \( 100 \+ 100 \* ${angle} / 180 \) % 200)
+		local hue=$(expr \( 100 \+ 100 \* ${angle} / 180 \) % 200)
 		convert $1.png -modulate 100,100,${hue} -alpha set \( +clone -background none -rotate ${angle} \) -gravity center -compose Src -composite +dither -colors 32 $1/$1_${angle}.png
 		files+=" $1/$1_${angle}.png";
 	done
@@ -116,30 +130,35 @@ lokify() {
 }
 
 anylokify() {
-	image_path=$1
-	grid_size=$2
+	local image_path=$1
+	local grid_size=$2
 
-	image_filename=$(basename ${image_path})
-	image_name=${image_filename%.*}
-	image_fmt=${image_filename##*.}
+	local image_filename=$(basename ${image_path})
+	local image_name=${image_filename%.*}
+	local image_fmt=${image_filename##*.}
 
-	rotations_output=${workspace}/${image_name}_$2lokify
-	mkdir -p ${rotations_output}
+	local output_dir=${workspace}/${image_name}-${grid_size}lokify
+	mkdir -p ${output_dir}
 
+	local resized_side=$(expr ${grid_size} \* ${SLACK_MAX_WIDTH})
+	local resized_dimensions=$(printf "%dx%d" ${resized_side} ${resized_side})
+	local resized_filename=${output_dir}/${image_name}-${resized_dimensions}.${image_fmt}
 
+	resize_image ${image_path} ${resized_dimensions} ${resized_filename}
+	generate_rotations ${resized_filename} ${image_name} ${output_dir}
 
-	generate_rotations ${image_path} ${rotations_output}
-
-	for img in $(find *.png ${rotations_output} | sort);
+	for img in $(find ${output_dir} -regex ".*-[0-9][0-9][0-9]\.${image_fmt}" | sort);
 	do
-		cut_to_tiles ${img} ${grid_size} ${SLACK_MAX_WIDTH} ${rotations_output}
+		cut_to_tiles ${img} "" ${grid_size} ${SLACK_MAX_WIDTH} ${output_dir}
 	done
 
-	for row in $(seq 0 1 ${grid_size});
+	for row in $(seq 0 1 `expr ${grid_size} - 1`)
 	do
-		for col in $(seq 0 1 ${grid_size});
+		for col in $(seq 0 1 `expr ${grid_size} - 1`)
 		do
-			assemble_gif "${image_name}_${row}${col}" "${image_name}_*_${row}${col}.png" ${rotations_output}
+			assemble_gif "${image_name}" "${row}${col}" \
+				".*${image_name}-[0-9]+-${row}${col}\.${image_fmt}" \
+				${output_dir} ${output_dir}
 		done
 	done
 }
@@ -156,10 +175,6 @@ teralokify() {
 	anylokify $1 4
 }
 
-lokolokify() {
-	echo "TODO"
-}
-
 print_usage() {
 	echo "TODO"
 }
@@ -168,7 +183,8 @@ command_=$1
 shift
 
 case ${command_} in
-	megafy|gigafy|terafy|lokify|megalokify|gigalokify|teralokify|lokolokify)
+	megafy|gigafy|terafy|lokify|\
+	megalokify|gigalokify|teralokify)
 		${command_} $*
 	;;
 	*) print_usage ;;
