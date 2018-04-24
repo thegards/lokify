@@ -1,8 +1,9 @@
 #!/bin/bash
 
 SLACK_MAX_WIDTH=100
+SLACK_MAX_HEIGHT=100
 
-workspace=`realpath $(dirname $0)`
+workspace=`realpath $(pwd)`
 
 assemble_gif() {
 	local image_prefix=$1
@@ -46,9 +47,11 @@ generate_rotations() {
 cut_to_tiles() {
 	local image_path=$1
 	local image_prefix=$2
-	local grid_size=$3
-	local tile_width=$4
-	local output_dir=$5
+	local grid_width=$3
+	local grid_height=$4
+	local tile_width=$5
+	local tile_height=$6
+	local output_dir=$7
 
 	local image_filename=$(basename ${image_path})
 	local image_name=${image_filename%.*}
@@ -59,13 +62,13 @@ cut_to_tiles() {
 		image_prefix=${image_name}
 	fi
 
-	local tile_dimensions=$(printf "%dx%d" ${tile_width} ${tile_width})
+	local tile_dimensions=$(printf "%dx%d" ${tile_width} ${tile_height})
 
 	mkdir -p ${output_dir}
 
 	convert ${image_path} \
 		-crop ${tile_dimensions} \
-		-set filename:tile "%[fx:page.y/${tile_width}]%[fx:page.x/${tile_width}]" \
+		-set filename:tile "%[fx:page.y/${tile_height}]%[fx:page.x/${tile_width}]" \
 		+repage +adjoin \
 		"${output_dir}/${image_prefix}-%[filename:tile].${image_fmt}"
 }
@@ -76,39 +79,48 @@ resize_image() {
 	local resized_filename=$3
 
 	convert ${image_path} \
-		-resize "${resized_dimensions}!" ${resized_filename}
+		-gravity Center -resize "${resized_dimensions}^" \
+		-crop "${resized_dimensions}+0+0" \
+		${resized_filename}
 }
 
 anyfy() {
 	local image_path=$1
-	local grid_size=$2
+	local grid_width=$2
+	local grid_height=$3
 
 	local image_filename=$(basename ${image_path})
 	local image_name=${image_filename%.*}
 	local image_fmt=${image_filename##*.}
 
-	local output_dir=${workspace}/${image_name}-${grid_size}fy
+	local output_dir=${workspace}/${image_name}-${grid_width}x${grid_height}fy
 
-	local resized_side=$(expr ${grid_size} \* ${SLACK_MAX_WIDTH})
-	local resized_dimensions=$(printf "%dx%d" ${resized_side} ${resized_side})
+	local resized_width=$(expr ${grid_width} \* ${SLACK_MAX_WIDTH})
+	local resized_height=$(expr ${grid_height} \* ${SLACK_MAX_HEIGHT})
+	local resized_dimensions=$(printf "%dx%d" ${resized_width} ${resized_height})
 	local resized_filename=${output_dir}/${image_name}-${resized_dimensions}.${image_fmt}
 
 	mkdir -p ${output_dir}
 
 	resize_image ${image_path} ${resized_dimensions} ${resized_filename}
-	cut_to_tiles ${resized_filename} ${image_name} ${grid_size} ${SLACK_MAX_WIDTH} ${output_dir}
+	cut_to_tiles ${resized_filename} ${image_name} ${grid_width} ${grid_height} \
+		${SLACK_MAX_WIDTH} ${SLACK_MAX_HEIGHT} ${output_dir}
 }
 
 megafy() {
-	anyfy $1 2
+	anyfy $1 2 2
 }
 
 gigafy() {
-	anyfy $1 3
+	anyfy $1 3 3
 }
 
 terafy() {
-	anyfy $1 4
+	anyfy $1 4 4
+}
+
+fontify() {
+	anyfy $1 3 5
 }
 
 lokify() {
@@ -131,7 +143,8 @@ lokify() {
 
 anylokify() {
 	local image_path=$1
-	local grid_size=$2
+	local grid_width=$2
+	local grid_height=$3
 
 	local image_filename=$(basename ${image_path})
 	local image_name=${image_filename%.*}
@@ -140,8 +153,9 @@ anylokify() {
 	local output_dir=${workspace}/${image_name}-${grid_size}lokify
 	mkdir -p ${output_dir}
 
-	local resized_side=$(expr ${grid_size} \* ${SLACK_MAX_WIDTH})
-	local resized_dimensions=$(printf "%dx%d" ${resized_side} ${resized_side})
+	local resized_width=$(expr ${grid_width} \* ${SLACK_MAX_WIDTH})
+	local resized_height=$(expr ${grid_height} \* ${SLACK_MAX_HEIGHT})
+	local resized_dimensions=$(printf "%dx%d" ${resized_width} ${resized_height})
 	local resized_filename=${output_dir}/${image_name}-${resized_dimensions}.${image_fmt}
 
 	resize_image ${image_path} ${resized_dimensions} ${resized_filename}
@@ -149,12 +163,13 @@ anylokify() {
 
 	for img in $(find ${output_dir} -regex ".*-[0-9][0-9][0-9]\.${image_fmt}" | sort);
 	do
-		cut_to_tiles ${img} "" ${grid_size} ${SLACK_MAX_WIDTH} ${output_dir}
+		cut_to_tiles ${img} "" ${grid_width} ${grid_height} ${SLACK_MAX_WIDTH} \
+			${SLACK_MAX_HEIGHT} ${output_dir}
 	done
 
-	for row in $(seq 0 1 `expr ${grid_size} - 1`)
+	for row in $(seq 0 1 `expr ${grid_height} - 1`)
 	do
-		for col in $(seq 0 1 `expr ${grid_size} - 1`)
+		for col in $(seq 0 1 `expr ${grid_width} - 1`)
 		do
 			assemble_gif "${image_name}" "${row}${col}" \
 				".*${image_name}-[0-9]+-${row}${col}\.${image_fmt}" \
@@ -164,15 +179,19 @@ anylokify() {
 }
 
 megalokify() {
-	anylokify $1 2
+	anylokify $1 2 2
 }
 
 gigalokify() {
-	anylokify $1 3
+	anylokify $1 3 3
 }
 
 teralokify() {
-	anylokify $1 4
+	anylokify $1 4 4
+}
+
+fontilokify() {
+	anylokify $1 3 5
 }
 
 print_usage() {
@@ -183,8 +202,8 @@ command_=$1
 shift
 
 case ${command_} in
-	megafy|gigafy|terafy|lokify|\
-	megalokify|gigalokify|teralokify)
+	fontify|megafy|gigafy|terafy|lokify|\
+	fontilokify|megalokify|gigalokify|teralokify)
 		${command_} $*
 	;;
 	*) print_usage ;;
