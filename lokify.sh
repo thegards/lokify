@@ -123,24 +123,6 @@ fontify() {
 	anyfy $1 3 5
 }
 
-lokify() {
-	#$1: filename (without extension)
-	#$2: gif-prefix
-
-	mkdir -p $1
-
-	local files=""
-
-	for angle in $(seq 0 20 340); do
-		local hue=$(expr \( 100 \+ 100 \* ${angle} / 180 \) % 200)
-		convert $1.png -modulate 100,100,${hue} -alpha set \( +clone -background none -rotate ${angle} \) -gravity center -compose Src -composite +dither -colors 32 $1/$1_${angle}.png
-		files+=" $1/$1_${angle}.png";
-	done
-
-	convert -loop 0 -page +0+0 ${files} -set dispose background -set delay 4 $1loko.gif
-	gifsicle -O2 --colors 128 $1loko.gif -o $1loko.opt.gif
-}
-
 anylokify() {
 	local image_path=$1
 	local grid_width=$2
@@ -178,6 +160,28 @@ anylokify() {
 	done
 }
 
+#lokify() {
+#	#$1: filename (without extension)
+#	#$2: gif-prefix
+#
+#	mkdir -p $1
+#
+#	local files=""
+#
+#	for angle in $(seq 0 20 340); do
+#		local hue=$(expr \( 100 \+ 100 \* ${angle} / 180 \) % 200)
+#		convert $1.png -modulate 100,100,${hue} -alpha set \( +clone -background none -rotate ${angle} \) -gravity center -compose Src -composite +dither -colors 32 $1/$1_${angle}.png
+#		files+=" $1/$1_${angle}.png";
+#	done
+#
+#	convert -loop 0 -page +0+0 ${files} -set dispose background -set delay 4 $1loko.gif
+#	gifsicle -O2 --colors 128 $1loko.gif -o $1loko.opt.gif
+#}
+
+lokify() {
+	anylokify $1 1 1
+}
+
 megalokify() {
 	anylokify $1 2 2
 }
@@ -188,6 +192,10 @@ gigalokify() {
 
 teralokify() {
 	anylokify $1 4 4
+}
+
+alanlokify() {
+	anylokify $1 8 8
 }
 
 fontilokify() {
@@ -202,7 +210,7 @@ command_=$1
 shift
 
 case ${command_} in
-	fontify|megafy|gigafy|terafy|lokify|\
+	fontify|megafy|gigafy|terafy|lokify|alanlokify|\
 	fontilokify|megalokify|gigalokify|teralokify)
 		${command_} $*
 	;;
